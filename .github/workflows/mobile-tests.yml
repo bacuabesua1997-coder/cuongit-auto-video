@@ -1,0 +1,44 @@
+name: Original engine and mobile adapter tests
+
+on:
+  pull_request:
+  push:
+    branches: [main, codex/android-original-pipeline]
+    paths:
+      - .github/workflows/**
+      - scripts/mobile/**
+      - src/**
+      - package*.json
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: npm ci --no-audit --no-fund
+      - name: Install FFmpeg and FFprobe required by original audio tests
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends ffmpeg
+      - name: Original tests and typecheck
+        run: |
+          npm test
+          npm run typecheck
+      - name: Mobile input and free Edge adapter tests (no API calls)
+        run: |
+          node --import tsx scripts/mobile/prepare-script.test.ts
+          npx --no-install tsc -p scripts/mobile/tsconfig.json
+          python -m unittest discover -s scripts/mobile -p 'test_*.py' -v

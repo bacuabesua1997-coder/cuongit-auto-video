@@ -1,0 +1,2 @@
+# Free Microsoft Edge speech service, including the current v2 handshake.
+edge-tts==7.3.1

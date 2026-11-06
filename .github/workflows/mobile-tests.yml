@@ -29,6 +29,10 @@ jobs:
         with:
           python-version: '3.12'
       - run: npm ci --no-audit --no-fund
+      - name: Install FFmpeg and FFprobe required by original audio tests
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends ffmpeg
       - name: Original tests and typecheck
         run: |
           npm test

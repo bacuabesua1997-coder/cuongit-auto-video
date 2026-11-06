@@ -28,7 +28,11 @@ jobs:
         with:
           node-version: '22'
           cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
       - run: npm ci --no-audit --no-fund
+      - run: python -m pip install -r scripts/mobile/requirements.txt
       - name: Install FFmpeg and fonts
         run: |
           sudo apt-get update -qq
@@ -44,7 +48,9 @@ jobs:
           mkdir -p output/original-demo
           cp tests/fixtures/sample-script-no-image.json output/original-demo/script.json
       - name: Render with original pipeline and real free Edge TTS
-        run: npm run pipeline -- output/original-demo/script.json
+        run: |
+          python scripts/mobile/prepare_edge.py output/original-demo/script.json
+          npm run pipeline -- output/original-demo/script.json
       - name: Decode MP4, measure audio and extract real frames
         run: node scripts/mobile/verify-video.mjs output/original-demo/video.mp4 output/original-demo/verification
       - name: Download demo and verification evidence

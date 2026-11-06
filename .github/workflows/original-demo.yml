@@ -43,6 +43,9 @@ jobs:
         run: |
           npm test
           npm run typecheck
+          node --import tsx scripts/mobile/prepare-script.test.ts
+          npx --no-install tsc -p scripts/mobile/tsconfig.json
+          python -m unittest discover -s scripts/mobile -p 'test_*.py' -v
       - name: Copy original example without editing it
         run: |
           mkdir -p output/original-demo

@@ -1,0 +1,112 @@
+name: Auto Video Gen - Create MP4
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'demo = video mẫu; prepare-agent = gói viết kịch bản; render-json = dựng JSON của agent'
+        required: true
+        default: demo
+        type: choice
+        options: [demo, prepare-agent, render-json]
+      source:
+        description: 'Chỉ dùng prepare-agent: URL bài báo HTTPS hoặc nội dung văn bản'
+        type: string
+        required: false
+      script_json:
+        description: 'Chỉ dùng render-json: dán object JSON do AI Coding Agent viết (không có dấu ``` )'
+        type: string
+        required: false
+      voice:
+        description: 'Giọng Edge TTS miễn phí'
+        type: choice
+        default: vi-VN-NamMinhNeural
+        options: [vi-VN-NamMinhNeural, vi-VN-HoaiMyNeural]
+      theme:
+        description: 'Giao diện gốc'
+        type: choice
+        default: dark-neon
+        options: [dark-neon, light-pro]
+
+permissions:
+  contents: read
+
+jobs:
+  create:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      TTS_PROVIDER: edge-tts
+      TTS_CONCURRENCY: '1'
+      EDGE_TTS_VOICE: ${{ inputs.voice }}
+      VIDEO_THEME: ${{ inputs.theme }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - name: Validate original-schema JSON or prepare the agent packet
+        env:
+          MODE: ${{ inputs.mode }}
+          SOURCE_INPUT: ${{ inputs.source }}
+          SCRIPT_JSON: ${{ inputs.script_json }}
+        # User input is data in env, never interpolated into a shell command.
+        run: node --import tsx scripts/mobile/prepare-script.ts
+      - name: Download instructions for your AI Coding Agent
+        if: inputs.mode == 'prepare-agent'
+        uses: actions/upload-artifact@v4
+        with:
+          name: cuongit-agent-packet-${{ github.run_number }}
+          path: output/mobile/
+          retention-days: 14
+          if-no-files-found: error
+      - uses: actions/setup-python@v5
+        if: inputs.mode != 'prepare-agent'
+        with:
+          python-version: '3.12'
+      - name: Install free Edge client and original-renderer prerequisites
+        if: inputs.mode != 'prepare-agent'
+        run: |
+          python -m pip install -r scripts/mobile/requirements.txt
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends ffmpeg fonts-dejavu-core fonts-noto-core
+          npx --no-install hyperframes browser ensure
+      - name: Generate real free Edge narration (v2 compatibility)
+        if: inputs.mode != 'prepare-agent'
+        run: python scripts/mobile/prepare_edge.py output/mobile/script.json
+      - name: Run the unchanged original HyperFrames pipeline
+        if: inputs.mode != 'prepare-agent'
+        run: npm run pipeline -- output/mobile/script.json
+      - name: Verify actual MP4 and extract frames
+        if: inputs.mode != 'prepare-agent'
+        run: node scripts/mobile/verify-video.mjs output/mobile/video.mp4 output/mobile/verification
+      - name: Download verified MP4, audio, script and per-scene subtitles
+        if: inputs.mode != 'prepare-agent'
+        uses: actions/upload-artifact@v4
+        with:
+          name: cuongit-video-${{ github.run_number }}
+          path: output/mobile/
+          retention-days: 14
+          if-no-files-found: error
+      - name: Instructions for Android
+        env:
+          MODE: ${{ inputs.mode }}
+        run: |
+          if [ "$MODE" = "prepare-agent" ]; then
+            cat >> "$GITHUB_STEP_SUMMARY" <<'EOF'
+          Đã tạo gói hướng dẫn, **chưa viết kịch bản và chưa dựng video**.
+          Tải Artifact `cuongit-agent-packet-*`, mở `agent-prompt.md` và gửi cho AI Coding Agent.
+          Agent đọc URL/văn bản và trả JSON theo schema gốc. Chạy lại workflow với `render-json`, dán JSON đó vào `script_json`.
+          EOF
+          else
+            cat >> "$GITHUB_STEP_SUMMARY" <<'EOF'
+          MP4 đã được dựng bằng **HyperFrames + HTML/CSS/GSAP + FFmpeg gốc**, giọng **Edge TTS miễn phí**.
+          Mở **Artifacts**, tải `cuongit-video-*`, giải nén và mở `video.mp4` trên Android.
+          Có `verification/verification.json` và ba khung hình trích từ MP4 để kiểm tra.
+          Video ở chế độ demo dùng dữ kiện minh họa của fixture gốc, không phải bản tin đã kiểm chứng.
+          EOF
+          fi

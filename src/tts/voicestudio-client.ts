@@ -36,6 +36,9 @@ function normalizeBaseUrl(value: string, apiKey?: string): string {
   if (url.username || url.password) {
     throw new Error("Do not put credentials in the VoiceStudio URL; use VOICESTUDIO_API_KEY");
   }
+  if (url.search || url.hash) {
+    throw new Error("VoiceStudio baseUrl must not contain a query string or fragment");
+  }
 
   const host = url.hostname.toLowerCase();
   const isLoopback = host === "localhost" || host === "127.0.0.1" || host === "::1" || host === "[::1]";
@@ -140,6 +143,9 @@ export class VoiceStudioClient implements TtsClient {
       if (contentType.includes("application/json")) {
         const detail = errorMessageFromBody(audio) ?? "unexpected JSON response";
         throw new Error("VoiceStudio returned JSON instead of audio: " + detail);
+      }
+      if (contentType && !contentType.startsWith("audio/") && !contentType.includes("application/octet-stream")) {
+        throw new Error("VoiceStudio returned an unexpected content type: " + contentType);
       }
 
       await writeFile(audioOutPath, audio);
